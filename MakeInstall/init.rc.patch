@@ -1,0 +1,332 @@
+--- init.rc	2011-01-24 02:25:16.054249852 +0900
++++ ../init.rc	2011-01-24 02:23:22.334578706 +0900
+@@ -3,7 +3,7 @@
+ 
+ sysclktz 0
+ 
+-loglevel 3
++loglevel 6
+ 
+     export PATH /sbin:/system/sbin:/system/bin:/system/xbin
+     export LD_LIBRARY_PATH /system/lib
+@@ -11,17 +11,23 @@
+     export ANDROID_ROOT /system
+     export ANDROID_ASSETS /system/app
+     export ANDROID_DATA /data
+-    export EXTERNAL_STORAGE /sdcard
+-    export DOWNLOAD_CACHE /data/cache
++    export EXTERNAL_STORAGE /mnt/sdcard
++    export ASEC_MOUNTPOINT /mnt/asec
+     export BOOTCLASSPATH /system/framework/core.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/android.policy.jar:/system/framework/services.jar
+ 
+-    symlink /system/etc /etc
++    symlink /sys/kernel/debug /d
++
++    mkdir /mnt 0775 root system
++    mkdir /mnt/sdcard 0000 system system
++    symlink /mnt/sdcard /sdcard
++
++    mkdir /acct
++    mount cgroup none /acct cpuacct
++    mkdir /acct/uid
+ 
+-    mkdir /sdcard 0000 system system
+-    mkdir /cprm 0000 system system
+-    mkdir /system
+-    mkdir /data 0771 system system
+     mkdir /cache 0770 system cache
++    mkdir /config 0500 root root
++
+     mkdir /sqlite_stmt_journals 01777 root root
+     mount tmpfs tmpfs /sqlite_stmt_journals size=4m
+     mkdir /obex_data_tmp 01777 root root
+@@ -39,11 +45,18 @@
+     chown system system /sqlite_journals
+     chmod 0777 /sqlite_journals
+ 
++    mkdir /mnt/secure 0700 root root
++
++    mkdir /mnt/secure/staging 0700 root root
++
++    mkdir /mnt/secure/asec  0700 root root
++
++    mkdir /mnt/asec  0700 root system
++    mount tmpfs tmpfs /mnt/asec mode=0755,gid=1000
+ 
+     mkdir /sh_tmp 0666 root root
+     mount tmpfs tmpfs /sh_tmp
+     
+-	mount rootfs rootfs / ro remount
+ 
+     write /proc/sys/kernel/panic_on_oops 1
+     write /proc/sys/kernel/hung_task_timeout_secs 0
+@@ -54,7 +67,7 @@
+ 
+     mkdir /dev/cpuctl
+     mount cgroup none /dev/cpuctl cpu
+-    chown sytem system /dev/cpuctl
++    chown system system /dev/cpuctl
+     chown system system /dev/cpuctl/tasks
+     chmod 0777 /dev/cpuctl/tasks
+     write /dev/cpuctl/cpu.shares 1024
+@@ -69,30 +82,56 @@
+     chmod 0777 /dev/cpuctl/bg_non_interactive/tasks
+     write /dev/cpuctl/bg_non_interactive/cpu.shares 52
+ 
+-    mount yaffs2 mtd@system /system ro
++    mkdir /system0
++    mount yaffs2 mtd@system /system0
++    mount yaffs2 mtd@system /system0 ro remount
++
++
+ 
+-    mount ext3 /dev/block/mmcblk0p1 /data nosuid nodev
++    mkdir /data0
++    mount ext3 /dev/block/mmcblk0p1 /data0 nodev
++    symlink /data0/data_ex/data /data
+     chown system system /data
+-    chmod 0777 /data
++    chown system system /data0/data_ex/data
++    chmod 0771  system system /data0/data_ex/data
++    symlink /data0/system_ex/system /system    
++    symlink /system/etc /etc
+ 
+     mkdir /data/ro 0771 system system
+     mount ext3 /dev/block/mmcblk0p2 /data/ro nosuid nodev ro
+     chown system system /data/ro
+     chmod 0777 /data/ro
+ 
++
++    mkdir /data/dontpanic
++    chown root log /data/dontpanic
++    chmod 0750 /data/dontpanic
++
++
++
++
+     mount yaffs2 mtd@cache /cache nosuid nodev
+     chown system cache /cache
+     chmod 0770 /cache
+ 
+-    chown system system /cache/recovery
++    chown system cache /cache/recovery
+     chmod 0770 /cache/recovery
+ 
++    chown root log /proc/vmallocinfo
++    chmod 0440 /proc/vmallocinfo
++
++    chown root system /proc/kmsg
++    chmod 0440 /proc/kmsg
++
+     mkdir /data/misc 01771 system misc
+-    mkdir /data/misc/hcid 0770 bluetooth bluetooth
+-    mkdir /data/misc/keystore 0770 keystore keystore
++    mkdir /data/misc/bluetoothd 0770 bluetooth bluetooth
++    mkdir /data/misc/bluetooth 0770 system system
++    mkdir /data/misc/keystore 0700 keystore keystore
+     mkdir /data/misc/vpn 0770 system system
++    mkdir /data/misc/systemkeys 0700 system system
+     mkdir /data/misc/vpn/profiles 0770 system system
+     mkdir /data/misc/wifi 0770 wifi wifi
++
+     mkdir /data/misc/wifi/sockets 0770 wifi wifi
+     mkdir /data/misc/dhcp 0770 dhcp dhcp
+     chown dhcp dhcp /data/misc/dhcp
+@@ -96,9 +135,11 @@
+     mkdir /data/misc/wifi/sockets 0770 wifi wifi
+     mkdir /data/misc/dhcp 0770 dhcp dhcp
+     chown dhcp dhcp /data/misc/dhcp
+-    chmod 0644 /system/etc/wifi/wpa_supplicant.conf
+     chmod 0770 /data/misc/wifi
++    chown wifi wifi /data/misc/wifi
+     chmod 0660 /data/misc/wifi/wpa_supplicant.conf
++    chown wifi wifi /data/misc/wifi/wpa_supplicant.conf
++
+     mkdir /data/local 0771 shell shell
+     mkdir /data/local/tmp 0771 shell shell
+     mkdir /data/data 0771 system system
+@@ -164,10 +205,6 @@
+     setprop ro.CONTENT_PROVIDER_MEM 5632
+     setprop ro.EMPTY_APP_MEM 6144
+ 
+-    setprop ro.com.google.location_feature 1
+-    setprop GET_TOUCH_EVENTS 0
+-    setprop GET_KEY_EVENTS 0
+-
+     write /sys/module/lowmemorykiller/parameters/adj 0,1,2,7,14,15
+ 
+     write /proc/sys/vm/overcommit_memory 1
+@@ -176,6 +213,9 @@
+ 
+     write /proc/1/oom_adj -16
+ 
++    write /proc/sys/vm/dirty_expire_centisecs 200
++    write /proc/sys/vm/dirty_background_ratio  5
++
+     chown radio system /sys/android_power/state
+     chown radio system /sys/android_power/request_state
+     chown radio system /sys/android_power/acquire_full_wake_lock
+@@ -235,22 +275,6 @@
+ 
+     chmod 0666 /dev/smd_shdiag
+ 
+-
+-    mkdir /data/data/com.android.providers.settings 0771 system system
+-    mkdir /data/data/com.android.providers.settings/lib 0755 system system
+-    mkdir /sqlite_journals/com.android.providers.settings 0771 system system
+-    mkdir /sqlite_journals/com.android.providers.settings/databases 0771 system system
+-    symlink /sqlite_journals/com.android.providers.settings/databases /data/data/com.android.providers.settings/databases
+-
+-    mkdir /data/data/com.android.providers.settingsex 0771 system system
+-    mkdir /data/data/com.android.providers.settingsex/lib 0755 system system
+-    mkdir /sqlite_journals/com.android.providers.settingsex 0771 system system
+-    mkdir /sqlite_journals/com.android.providers.settingsex/databases 0771 system system
+-    symlink /sqlite_journals/com.android.providers.settingsex/databases /data/data/com.android.providers.settingsex/databases
+-
+-
+-
+-
+     setprop net.tcp.buffersize.default 4096,87380,110208,4096,16384,110208
+     setprop net.tcp.buffersize.wifi    4095,87380,110208,4096,16384,110208
+     setprop net.tcp.buffersize.umts    4094,87380,110208,4096,16384,110208
+@@ -260,15 +284,13 @@
+ 	setprop net.pppbtdg.clientIp 1.2.3.5
+ 	setprop net.pppbtdg.portspeed 115200
+ 
+-       setprop ro.config.libmotionemoji libmotionemoji_impl.so
+ 
+-    class_start default
+ 
+-	setprop wifi.interface wlan0
+ 
+-insmod /system/lib/modules/unifi_sdio.ko
+-setprop wlan.driver.status loaded
+-write /proc/sys/kernel/modules_disabled 1
++    class_start default
++    setprop wifi.interface wlan0
++    insmod /system/lib/modules/unifi_sdio.ko
++    setprop wlan.driver.status loaded
+ 
+ service console /system/bin/sh
+     console
+@@ -297,13 +319,12 @@
+     critical
+     onrestart restart zygote
+     onrestart restart media
+-    onrestart restart mediayamaha
+ 
+-	onrestart restart dtvserver
+-	onrestart restart sdservice
++onrestart restart sdservice
+ 
+ service vold /system/bin/vold
+     socket vold stream 0660 root mount
++    ioprio be 2
+ 
+ service usbmgrd /system/bin/usbmgrd
+     socket usbmgrd stream 0660 root mount
+@@ -312,40 +333,31 @@
+     socket nexus stream 0660 root system
+     disabled
+ 
++service netd /system/bin/netd
++    socket netd stream 0660 root system
+ 
+ service debuggerd /system/bin/debuggerd
+ 
+-service fotad /system/bin/fotad
+-    user root
++
+ 
+ service ril-daemon /system/bin/rild
+     socket rild stream 660 root radio
+     socket rild-debug stream 660 radio system
+     user root
+-    group radio cache inet misc
++    group radio cache inet misc audio
+ 
+-service uim-daemon /system/bin/uimd
+-    socket uimd stream 0660 root radio
+-    user root
+-    group radio cache inet misc
+ 
+ service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
+     socket zygote stream 666
+     onrestart write /sys/android_power/request_state wake
+     onrestart write /sys/power/state on
++    onrestart restart media
+ 
+ service media /system/bin/mediaserver
+     user media
+-    group system audio camera graphics inet net_bt net_bt_admin
+-
+-service mediayamaha /system/bin/mediayamahaserver
+-    user media
+-    group system audio camera graphics inet net_bt net_bt_admin
++    group system audio camera graphics inet net_bt net_bt_admin net_raw
++    ioprio rt 4
+ 
+-service bootsound /system/bin/playmp3
+-    user media
+-    group audio
+-    oneshot
+ 
+ service bootanim /system/bin/bootanimation
+     user graphics
+@@ -354,7 +366,7 @@
+     oneshot
+ 
+ service dbus /system/bin/dbus-daemon --system --nofork
+-    socket dbus stream 666 bluetooth bluetooth
++    socket dbus stream 660 bluetooth bluetooth
+     user bluetooth
+     group bluetooth net_bt_admin
+ 
+@@ -370,10 +382,9 @@
+ service bdb3_init /system/etc/init.bdb3.sh
+     oneshot
+ 
+-busybox --install 
+ service racoon /system/bin/racoon
+     socket racoon stream 600 system system
+-    group net_admin keystore
++    group net_admin
+     disabled
+     oneshot
+ 
+@@ -384,19 +395,24 @@
+     disabled
+     oneshot
+ 
+-service keystore /system/bin/keystore
++service keystore /system/bin/keystore /data/misc/keystore
+     user keystore
+     group keystore
+     socket keystore stream 666
+ 
++service dumpstate /system/bin/dumpstate -s
++    socket dumpstate stream 0660 shell log
++    disabled
++    oneshot
++
+ service shlcdc_process /system/bin/shlcdc_process
+ service shdisp_process /system/bin/shdisp_process
+ 
+-service dhcpcd /system/bin/logwrapper /system/bin/dhcpcd -d wlan0 -dd
++service dhcpcd /system/bin/logwrapper /system/bin/dhcpcd -dd wlan0
+     disabled
+     oneshot
+ 
+-service wpa_supplicant /system/bin/logwrapper /system/bin/wpa_supplicant -Dwext -iwlan0 -c/data/misc/wifi/wpa_supplicant.conf
++service wpa_supplicant /system/bin/logwrapper /system/bin/wpa_supplicant -Dwext -iwlan0 -c/data/misc/wifi/wpa_supplicant.conf -dd &
+     user root
+     group wifi inet
+     socket wpa_wlan0 dgram 660 wifi wifi
+@@ -410,7 +426,6 @@
+ 
+ service shsd_process /system/bin/shsd_process
+ 
+-service dtvserver /system/bin/dtvserver
+ service sdservice /system/bin/sdservice
+ 
+ service obexd /system/bin/obexd
